@@ -1,105 +1,114 @@
-TrainGRC: AI Compliance Training Manager 
-Purpose: To help Training Leads like you create, manage, and measure training programs across Governance, Risk, and Compliance domains—supporting your team’s continuous development in a structured, engaging, and data-driven way.
+TrainGRC: AI Compliance Training Manager
+Purpose
+TrainGRC is designed to help Training Leads like you create, assign, and evaluate structured, role-based training programs across Governance, Risk, and Compliance (GRC) domains. It ensures continuous team development through an engaging, trackable, and data-informed platform.
 ________________________________________
-Core Features:
-1.	Training Path Builder
-o	Design role-based learning tracks (e.g., for Security Team, Compliance Team, Risk Team, Governance Team).
-o	Upload videos, PDFs, slide decks, case studies, and links to external courses (like Coursera).
-o	Add quizzes, activities, or reflective questions.
-2.	Role-Based Learning Plans
-o	Assign tailored learning paths based on job title, team function (e.g., Security Team, Compliance Team, Risk Team, Governance Team), or experience level.
-o	Set deadlines or recurring refreshers (e.g., quarterly compliance refreshers).
-o	Training Leads (and authorized admin roles) can assign specific courses and quizzes to individual trainees or groups.
-3.	Progress Tracker
-o	Visual dashboard showing individual and team progress: 
-	% of course completion
-	Quiz scores
-	Time spent on training
-o	Highlight overdue or upcoming modules.
-4.	Assessment & Certification
-o	Include built-in knowledge checks (multiple choice, short answer).
-o	Automatically generate certificates for completed tracks.
-o	Option to set a pass/fail benchmark.
-5.	Engagement & Feedback
-o	Anonymous learner feedback after modules.
-o	“Ask a Trainer” feature for questions or clarifications.
-o	Badge system or leaderboard for motivation.
-6.	Weekly Summary Reports
-o	Auto-generate email or PDF summaries for management: 
-	Completions this week
-	Top performers
-	Team-wide training status
+Core Features
+1. Training Path Builder
+•	Create tailored learning tracks for roles such as the Security, Compliance, Risk, Governance, or General Teams.
+•	Upload and organize training content: videos, PDFs, slide decks, case studies, external links (e.g., Coursera).
+•	Add assessments, interactive activities, or reflective questions.
+•	When assigning a course, admins must fill in:
+o	Course Name
+o	Training Link/Attachment
+o	Due Date
+2. Role-Based Learning Plans
+•	Assign training based on job title, team function (e.g., Security, Compliance, Risk, Governance, General), or Cohort grouping (Cohort 1, Cohort 2, Cohort 3).
+•	Set deadlines or automated recurring refreshers (e.g., quarterly updates).
+•	Admins can assign courses and quizzes to individuals or groups.
+•	Quiz Assignment Options:
+o	Question Types: Multiple Choice, True/False, Open Explanation.
+o	Admins must input correct answers, allowing the system to mark responses and show trainees what they got right or wrong.
+3. Progress Tracker
+•	Visual dashboards for both admins and trainees:
+o	% of course completion
+o	Quiz scores
+o	Time spent per module
+o	Overdue or upcoming content clearly highlighted
+4. Assessment & Certification
+•	Include built-in quizzes and short assessments.
+•	Auto-marking system shows correct/incorrect responses and explanations.
+•	Issue completion certificates.
+•	Define pass/fail thresholds per module.
+5. Engagement & Feedback
+•	Post-training anonymous feedback forms.
+•	“Ask a Trainer” support feature.
+•	Gamification through badges and leaderboards.
+6. Weekly Summary Reports
+•	Auto-generated reports for team leads and management:
+o	Weekly completions
+o	Top performers
+o	Trainee progress overview
+o	Non-completions & overdue tasks
 ________________________________________
-New & Enhanced Trainee Features:
-1.	Trainee Sign-In Page
-o	A dedicated, secure sign-in portal for all trainees.
-o	Users can access their personalized dashboard, assigned training, and progress.
-2.	My Courses & Quizzes (Trainee Dashboard)
-o	A centralized section for trainees to view all assigned courses and quizzes.
-o	Clearly indicates due dates and progress for each item.
-3.	Completed Courses & Certifications
-o	A dedicated section where trainees can view all courses they have successfully completed.
-o	Trainees can upload links to their completion badges or certificates from external platforms.
-4.	Quiz Submission & History
-o	A section where trainees can access and take assigned quizzes.
-o	Trainees can upload their answers or documents related to quiz submissions where applicable (e.g., for short answer or case study responses).
-o	View their quiz history and scores.
+New & Enhanced Trainee Features
+1. Trainee Sign-In Page
+•	Secure, personalized login portal.
+•	Access to assigned courses, quizzes, and current progress.
+2. My Courses & Quizzes
+•	Trainees can view all active training assignments.
+•	Clear indicators for due dates, status, and completion.
+3. Completed Courses & Certifications
+•	View and download certificates for completed trainings.
+•	Upload badges/certificates from external courses.
+4. Quiz Submission & History
+•	Take quizzes and upload documents (if required).
+•	View quiz history, scores, and correct/incorrect answers.
+5. Due Date Notifications
+•	Automated reminders for upcoming due dates (e.g., 6 hours before).
+•	Alerts when deadlines have passed.
+•	Trainees are notified via email or in-app alerts.
 ________________________________________
-Admin Access & Roles:
-TrainGRC offers various admin access levels to ensure efficient management and oversight of training programs.
-1.	Support Team
-o	Access: Limited access to view trainee progress, assist with technical issues, and provide basic guidance. Cannot modify content or assignments. Can escalate issues to Domain Coordinators or Team Leads.
-2.	Domain Coordinator
-o	Access: Manages specific training domains (e.g., Security GRC, Compliance GRC, Risk GRC, Governance GRC). Can create and manage courses within their domain, assign training paths to relevant teams (e.g., Security Team members), view detailed progress reports for their domain, and manage quizzes. Can't modify other domains.
-3.	Team Lead
-o	Access: Oversees training for their specific team (e.g., Lead for the Compliance Team). Can assign training to their team members, monitor individual and team progress, approve completed modules, and access team-specific reports. Can request new content from Domain Coordinators or Project Managers.
-4.	Co-Lead
-o	Access: Similar to Team Lead but may have shared responsibilities or oversee a sub-team. Can assign training, monitor progress, and access reports for their designated group of trainees.
-5.	Project Manager
-o	Access: Full administrative control over the entire TrainGRC platform. Can create, edit, and assign all training content across all domains, manage users, set global deadlines, generate comprehensive reports, and configure system settings. This role typically has the highest level of oversight and strategic planning capabilities.
+Admin Access & Roles
+Admins must sign up using a special code known only to authorized personnel to gain role-specific access.
+1. Support Team
+•	View-only access for monitoring and troubleshooting.
+•	Cannot assign or edit content.
+2. Domain Coordinator
+•	Manages content within a specific domain (e.g., Compliance GRC).
+•	Assigns domain-specific training and quizzes.
+•	Views domain-level reports.
+3. Team Lead
+•	Manages team-specific training and tracks progress.
+•	Approves module completions and requests new content.
+4. Co-Lead
+•	Shared responsibilities with Team Lead, usually for sub-teams.
+5. Project Manager
+•	Full system-wide access and control.
+•	Can manage all users, content, reports, and system settings.
 ________________________________________
-TrainGRC Add-On Features:
-1.	Notification Center
-o	Purpose: Keep learners informed and engaged with a centralized update feed.
-o	Features: 
-	Alerts for: 
-	New training assignments
-	Quiz results
-	Feedback from trainers
-	Deadline reminders
-	Reminders are sent 6 hours before the due date and time.
-	An alert for missing courses/quizzes is triggered when the due date and time has passed.
-	Learners can customize how and when they get notifications (email, app, push).
-2.	Smart Recommendations
-o	Purpose: Encourage continuous learning and upskilling.
-o	Features: 
-	Based on completed modules and quiz performance, recommend additional materials: 
-	Advanced modules
-	External resources (e.g., free GRC Coursera/MIT courses)
-	Suggested reading or microlearning activities
-o	Example: “You scored 92% on 'Data Risk Basics' – try ‘Advanced Data Risk & Ethics’ next!”
-3.	Heatmap & Skills Matrix
-o	Purpose: Visualize team-wide strengths and training gaps for strategic planning.
-o	Features: 
-	Color-coded heatmap by user/team: 
-	Green = completed & passed
-	Yellow = in progress
-	Red = overdue or failed
-	Skill matrix showing competency level across domains (e.g., Governance, Risk, Compliance, Security).
-	Filter by location, role, or department.
-o	Use Case: Great for audits, internal promotions, and targeted retraining.
-4.	Training Library & Resource Hub
-o	Purpose: Create an internal repository for reusable learning materials.
-o	Features: 
-	Organize resources by category: "New Starters," "Security Team Track," "Compliance Team Refreshers" etc.
-	Upload recorded training sessions, templates, readings, or tools.
-	Allow team members to search or bookmark content.
-o	Bonus: Add a “Trainer’s Picks” section curated by Project Managers or Domain Coordinators each month!
-5.	Ask a Trainer (AI Assistant)
-o	Purpose: Reduce dependency on 1:1 support while encouraging active learning.
-o	Features: 
-	AI assistant trained on your uploaded training content.
-	Learners can ask questions like: 
-	“What’s the difference between data classification and labeling?”
-	“How do I access the cleaning log template?”
-	Provides brief, contextual answers with links to relevant content.
+TrainGRC Add-On Features
+1. Notification Center
+•	Centralized alerts for:
+o	New assignments
+o	Quiz results
+o	Trainer feedback
+o	Upcoming/passed due dates
+•	Alerts sent via preferred channel (email, push notification).
+•	Trainees can customize notification settings.
+2. Smart Recommendations
+•	Suggest next modules or external resources based on performance.
+•	Personalized growth paths like:
+o	“You scored 92% on ‘Data Risk Basics’—Next: ‘Advanced Data Risk & Ethics’.”
+3. Heatmap & Skills Matrix
+•	Visual indicators of training status:
+o	Green = Completed/Passed
+o	Yellow = In Progress
+o	Red = Overdue/Failed
+•	Skill matrix by role, cohort, or team function (Security, Risk, Governance, Compliance, General).
+•	Useful for audits and workforce planning.
+4. Training Library & Resource Hub
+•	Central repository for all reusable training materials.
+•	Filterable categories: "New Starters", "Security Refreshers", etc.
+•	Monthly “Trainer’s Picks” spotlight curated content.
+5. Ask a Trainer (AI Assistant)
+•	AI chatbot trained on your training materials.
+•	Provides real-time answers with links to resources.
+•	Example queries:
+o	“What’s the difference between classification and labeling?”
+o	“Where can I find the Cleaning Log Template?”
+________________________________________
+Submission & Review Tools
+•	Admins can view all submissions (courses and quizzes).
+•	Filter by submitted, not submitted, pending review.
+•	Sort by team, domain, team function (including General), or cohort.
+•	Export reports for audit or review purposes.

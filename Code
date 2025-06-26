@@ -1,0 +1,1229 @@
+import React, { useState, useEffect, createContext, useContext } from 'react';
+
+// Firebase imports (CDN for HTML, but for React we assume they are available in node_modules if building with a bundler)
+// For Canvas environment, these will be pulled from the global scope or similar.
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { getFirestore, doc, getDoc, setDoc, collection, query, onSnapshot, addDoc, updateDoc } from 'firebase/firestore';
+
+// Create a context for Firebase services and user data
+const AppContext = createContext(null);
+
+// Utility for safe access to global variables provided by Canvas
+const getGlobalVar = (name, defaultValue) => {
+  if (typeof window !== 'undefined' && typeof window[name] !== 'undefined') {
+    return window[name];
+  }
+  if (typeof globalThis !== 'undefined' && typeof globalThis[name] !== 'undefined') {
+    return globalThis[name];
+  }
+  return defaultValue;
+};
+
+// Global variables for Firebase configuration provided by the Canvas environment
+const appId = getGlobalVar('__app_id', 'default-app-id');
+const firebaseConfig = JSON.parse(getGlobalVar('__firebase_config', '{}'));
+const initialAuthToken = getGlobalVar('__initial_auth_token', '');
+
+// Initialize Firebase App
+const firebaseApp = Object.keys(firebaseConfig).length > 0 ? initializeApp(firebaseConfig) : null;
+const db = firebaseApp ? getFirestore(firebaseApp) : null;
+const auth = firebaseApp ? getAuth(firebaseApp) : null;
+
+// Mock data for demonstration purposes
+const mockCourses = [
+  { id: 'C001', title: 'Introduction to GRC', description: 'Core concepts of Governance, Risk, and Compliance.', type: 'video', contentUrl: 'https://www.youtube.com/embed/videoseries?list=PL_l4T49N7m4qL7s7t7J1sF4J0sF1J7g7G' },
+  { id: 'C002', title: 'Data Privacy Regulations (GDPR/CCPA)', description: 'Understanding global data privacy laws.', type: 'pdf', contentUrl: 'https://www.africau.edu/images/default/sample.pdf' },
+  { id: 'C003', title: 'Cybersecurity Fundamentals', description: 'Basic principles of cybersecurity.', type: 'slides', contentUrl: 'https://docs.google.com/presentation/d/1B0qf5qT5qK5qK5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5qT5q/embed?start=false&loop=false&delayms=3000' },
+  { id: 'C004', title: 'Risk Management Strategies', description: 'Identifying and mitigating risks in an organization.', type: 'external_link', contentUrl: 'https://www.coursera.org/learn/risk-management' },
+];
+
+const mockQuizzes = [
+  {
+    id: 'Q001',
+    title: 'GRC Fundamentals Quiz',
+    questions: [
+      { id: 'q1', type: 'multiple_choice', questionText: 'What does GRC stand for?', options: ['Governance, Risk, Compliance', 'Global, Regulatory, Control', 'General, Research, Communication'], correctAnswer: 'Governance, Risk, Compliance' },
+      { id: 'q2', type: 'short_answer', questionText: 'Explain the importance of compliance in an organization.' },
+    ],
+    passBenchmark: 70,
+  },
+  {
+    id: 'Q002',
+    title: 'Data Privacy Quiz',
+    questions: [
+      { id: 'q1', type: 'multiple_choice', questionText: 'Which regulation focuses on data protection and privacy in the EU?', options: ['HIPAA', 'GDPR', 'CCPA'], correctAnswer: 'GDPR' },
+    ],
+    passBenchmark: 80,
+  },
+];
+
+// Context Provider component
+const AppProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [userId, setUserId] = useState(null);
+  const [userRole, setUserRole] = useState(null); // e.g., 'trainee', 'project_manager'
+  const [isAuthReady, setIsAuthReady] = useState(false); // Indicates if auth state has been checked
+
+  useEffect(() => {
+    if (!auth) {
+      console.error("Firebase Auth not initialized.");
+      setIsAuthReady(true); // Treat as ready even if uninitialized, for graceful handling
+      return;
+    }
+
+    // Sign in with custom token or anonymously
+    const signIn = async () => {
+      try {
+        if (initialAuthToken) {
+          await signInWithCustomToken(auth, initialAuthToken);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Error signing in:", error);
+      }
+    };
+
+    signIn();
+
+    // Listen for auth state changes
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        const currentUserId = currentUser.uid;
+        setUserId(currentUserId);
+
+        // Fetch user profile from Firestore
+        const userDocRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'profile', 'data');
+        const userDocSnap = await getDoc(userDocRef);
+
+        if (userDocSnap.exists()) {
+          const userData = userDocSnap.data();
+          setUserRole(userData.role);
+        } else {
+          // If no profile, default to trainee or prompt creation
+          setUserRole('trainee'); // Default role
+          // You might want to create a default profile here for new users
+          await setDoc(userDocRef, { uid: currentUserId, email: currentUser.email, role: 'trainee', name: 'New Trainee', team: 'Unassigned' });
+        }
+      } else {
+        setUserId(null);
+        setUserRole(null);
+      }
+      setIsAuthReady(true); // Auth state check complete
+    });
+
+    // Clean up listener on unmount
+    return () => unsubscribe();
+  }, []); // Empty dependency array means this runs once on mount
+
+  // Provide values to children components
+  const contextValue = { db, auth, user, userId, userRole, isAuthReady, appId };
+
+  return (
+    <AppContext.Provider value={contextValue}>
+      {children}
+    </AppContext.Provider>
+  );
+};
+
+// Custom Hook to use the AppContext
+const useAppContext = () => {
+  const context = useContext(AppContext);
+  if (!context) {
+    throw new Error('useAppContext must be used within an AppProvider');
+  }
+  return context;
+};
+
+// Reusable Modal Component for alerts/confirmations
+const Modal = ({ show, title, message, onConfirm, onCancel, showCancel = false }) => {
+  if (!show) return null;
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full transform transition-all sm:my-8 sm:align-middle sm:max-w-lg">
+        <h3 className="text-xl font-semibold text-gray-900 mb-4">{title}</h3>
+        <p className="text-gray-700 mb-6">{message}</p>
+        <div className="flex justify-end space-x-3">
+          {showCancel && (
+            <button
+              onClick={onCancel}
+              className="px-5 py-2.5 rounded-lg text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400"
+            >
+              Cancel
+            </button>
+          )}
+          <button
+            onClick={onConfirm}
+            className="px-5 py-2.5 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+            Confirm
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+// ----------------------------------------------------
+// Sign-In Page Component
+// ----------------------------------------------------
+const SignInPage = () => {
+  const { auth, db, appId } = useAppContext();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [selectedRole, setSelectedRole] = useState('trainee'); // Default role for registration
+  const [showModal, setShowModal] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState('');
+  const [isSuccessModal, setIsSuccessModal] = useState(false);
+
+
+  const handleSignIn = async () => {
+    setError('');
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      // Auth state listener in AppProvider handles user data update
+    } catch (err) {
+      if (err.code === 'auth/operation-not-allowed') {
+        setModalTitle("Sign-In Error");
+        setModalMessage("Email/Password sign-in is not enabled. Please enable it in your Firebase Authentication settings.");
+        console.error("Firebase Error: Email/Password sign-in is not enabled. Go to Firebase Console > Authentication > Sign-in method and enable 'Email/Password'.");
+      } else {
+        setModalTitle("Sign-In Error");
+        setModalMessage(`Failed to sign in: ${err.message}`);
+      }
+      setIsSuccessModal(false);
+      setShowModal(true);
+      console.error("Sign-in error:", err);
+    }
+  };
+
+  const handleRegister = async () => {
+    setError('');
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const newUser = userCredential.user;
+
+      // Save user profile with selected role in Firestore
+      const userDocRef = doc(db, 'artifacts', appId, 'users', newUser.uid, 'profile', 'data');
+      await setDoc(userDocRef, {
+        uid: newUser.uid,
+        email: newUser.email,
+        role: selectedRole,
+        name: 'New User', // Placeholder name
+        team: 'Unassigned', // Placeholder team
+      });
+
+      setModalTitle("Registration Successful");
+      setModalMessage("Account created successfully! You can now sign in.");
+      setIsSuccessModal(true);
+      setShowModal(true);
+      setIsRegistering(false); // Switch back to sign-in form
+    } catch (err) {
+      if (err.code === 'auth/operation-not-allowed') {
+        setModalTitle("Registration Error");
+        setModalMessage("Email/Password registration is not enabled. Please enable it in your Firebase Authentication settings.");
+        console.error("Firebase Error: Email/Password registration is not enabled. Go to Firebase Console > Authentication > Sign-in method and enable 'Email/Password'.");
+      } else {
+        setModalTitle("Registration Error");
+        setModalMessage(`Failed to register: ${err.message}`);
+      }
+      setIsSuccessModal(false);
+      setShowModal(true);
+      console.error("Registration error:", err);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setModalMessage('');
+    setModalTitle('');
+    setError('');
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 to-indigo-200 p-4">
+      <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md text-center border border-gray-200">
+        <h2 className="text-3xl font-extrabold text-gray-900 mb-6">
+          Welcome to TrainGRC
+        </h2>
+        <p className="text-gray-600 mb-8">
+          {isRegistering ? "Create your account" : "Sign in to your account"}
+        </p>
+
+        {error && <p className="text-red-600 mb-4">{error}</p>}
+
+        <div className="space-y-4">
+          <input
+            type="email"
+            placeholder="Email"
+            className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          {isRegistering && (
+            <div className="text-left">
+              <label htmlFor="role-select" className="block text-sm font-medium text-gray-700 mb-2">
+                Select your role (for demo purposes):
+              </label>
+              <select
+                id="role-select"
+                className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out"
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value)}
+              >
+                <option value="trainee">Trainee</option>
+                <option value="support">Support Team</option>
+                <option value="domain_coordinator">Domain Coordinator</option>
+                <option value="team_lead">Team Lead</option>
+                <option value="co_lead">Co-Lead</option>
+                <option value="project_manager">Project Manager</option>
+              </select>
+            </div>
+          )}
+          <button
+            onClick={isRegistering ? handleRegister : handleSignIn}
+            className="w-full px-5 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-150 ease-in-out transform hover:scale-105"
+          >
+            {isRegistering ? "Register" : "Sign In"}
+          </button>
+        </div>
+
+        <p className="mt-6 text-gray-600">
+          {isRegistering ? (
+            <>
+              Already have an account?{" "}
+              <button
+                onClick={() => setIsRegistering(false)}
+                className="text-blue-600 hover:text-blue-700 font-medium hover:underline"
+              >
+                Sign In
+              </button>
+            </>
+          ) : (
+            <>
+              Don't have an account?{" "}
+              <button
+                onClick={() => setIsRegistering(true)}
+                className="text-blue-600 hover:text-blue-700 font-medium hover:underline"
+              >
+                Register
+              </button>
+            </>
+          )}
+        </p>
+      </div>
+
+      <Modal
+        show={showModal}
+        title={modalTitle}
+        message={modalMessage}
+        onConfirm={handleCloseModal}
+        onCancel={handleCloseModal}
+        showCancel={false} // No cancel for info/error modals
+      />
+    </div>
+  );
+};
+
+
+// ----------------------------------------------------
+// Navigation & Layout Components
+// ----------------------------------------------------
+
+const Navbar = ({ setCurrentPage, userRole, handleSignOut }) => {
+  const navItems = [
+    { name: 'My Courses', page: 'my-courses', roles: ['trainee'] },
+    { name: 'Progress Tracker', page: 'progress-tracker', roles: ['support', 'domain_coordinator', 'team_lead', 'co_lead', 'project_manager'] },
+    { name: 'Training Builder', page: 'training-builder', roles: ['domain_coordinator', 'project_manager'] },
+    { name: 'User Management', page: 'user-management', roles: ['project_manager'] },
+    { name: 'Notifications', page: 'notifications', roles: ['trainee', 'support', 'domain_coordinator', 'team_lead', 'co_lead', 'project_manager'] },
+    { name: 'Ask a Trainer', page: 'ask-trainer', roles: ['trainee', 'support', 'domain_coordinator', 'team_lead', 'co_lead', 'project_manager'] },
+  ];
+
+  return (
+    <nav className="bg-gradient-to-r from-blue-700 to-indigo-700 p-4 shadow-lg rounded-b-xl">
+      <div className="container mx-auto flex justify-between items-center flex-wrap">
+        <div className="text-white text-2xl font-bold flex-shrink-0 mb-2 md:mb-0">
+          TrainGRC
+          {userRole && <span className="ml-3 text-sm font-medium text-blue-200">({userRole.replace('_', ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')})</span>}
+        </div>
+        <ul className="flex flex-wrap space-x-4">
+          {navItems.map(item =>
+            item.roles.includes(userRole) ? (
+              <li key={item.page}>
+                <button
+                  onClick={() => setCurrentPage(item.page)}
+                  className="px-4 py-2 rounded-lg text-white font-medium hover:bg-blue-600 transition-colors duration-200"
+                >
+                  {item.name}
+                </button>
+              </li>
+            ) : null
+          )}
+        </ul>
+        <button
+          onClick={handleSignOut}
+          className="px-4 py-2 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition-colors duration-200 mt-2 md:mt-0"
+        >
+          Sign Out
+        </button>
+      </div>
+    </nav>
+  );
+};
+
+// ----------------------------------------------------
+// Dashboard Sections (Placeholder Components)
+// ----------------------------------------------------
+
+const MyCourses = () => {
+  const { userId, db, appId, isAuthReady } = useAppContext();
+  const [assignedCourses, setAssignedCourses] = useState([]);
+  const [userProgress, setUserProgress] = useState({});
+  const [selectedCourse, setSelectedCourse] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
+
+  useEffect(() => {
+    if (!isAuthReady || !userId || !db) return;
+
+    // Listen for user progress
+    const progressRef = collection(db, 'artifacts', appId, 'users', userId, 'progress');
+    const unsubscribeProgress = onSnapshot(progressRef, (snapshot) => {
+      const progressMap = {};
+      snapshot.forEach(doc => {
+        progressMap[doc.data().courseId] = doc.data();
+      });
+      setUserProgress(progressMap);
+    }, (error) => console.error("Error fetching user progress:", error));
+
+    // Fetch assigned courses (mock for now, ideally assigned via learning paths)
+    // For a real app, this would query learningPaths assigned to the user's role/team
+    // and then fetch the courses listed in those paths.
+    // For now, let's just display all mock courses and associate them with mock progress.
+    const coursePromises = mockCourses.map(async (course) => {
+      // Simulate assigning all courses to a trainee for simplicity
+      // In a real app, you'd fetch based on learningPath assignments
+      const progressDocRef = doc(db, 'artifacts', appId, 'users', userId, 'progress', course.id);
+      const progressSnap = await getDoc(progressDocRef);
+      if (!progressSnap.exists()) {
+        await setDoc(progressDocRef, {
+          userId: userId,
+          courseId: course.id,
+          status: 'not_started',
+          completionPercentage: 0,
+          quizScores: {},
+          timeSpent: 0,
+          dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
+          assignedPathId: 'demo-path'
+        });
+      }
+      return course;
+    });
+
+    Promise.all(coursePromises).then(setAssignedCourses);
+
+    return () => {
+      unsubscribeProgress();
+    };
+  }, [userId, db, appId, isAuthReady]);
+
+  const handleCourseClick = (course) => {
+    setSelectedCourse(course);
+  };
+
+  const handleMarkComplete = async (courseId) => {
+    if (!userId || !db) return;
+    try {
+      const progressDocRef = doc(db, 'artifacts', appId, 'users', userId, 'progress', courseId);
+      await updateDoc(progressDocRef, {
+        status: 'completed',
+        completionPercentage: 100,
+      });
+      setModalTitle("Course Completed!");
+      setModalMessage(`${selectedCourse?.title} has been marked as completed.`);
+      setShowModal(true);
+    } catch (error) {
+      setModalTitle("Error");
+      setModalMessage(`Failed to mark course as complete: ${error.message}`);
+      setShowModal(true);
+      console.error("Error marking course complete:", error);
+    }
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setSelectedCourse(null);
+  };
+
+  const renderContent = (course) => {
+    if (!course) return null;
+
+    const progress = userProgress[course.id] || { completionPercentage: 0 };
+    const isCompleted = progress.status === 'completed';
+
+    return (
+      <div className="p-6 bg-white rounded-lg shadow-md mb-6">
+        <h3 className="text-2xl font-bold text-gray-800 mb-4">{course.title}</h3>
+        <p className="text-gray-700 mb-4">{course.description}</p>
+        <p className="text-sm text-gray-500 mb-4">Completion: {progress.completionPercentage}%</p>
+
+        {course.type === 'video' && ( // Changed from contentType to type to match mockCourses
+          <div className="aspect-video w-full mb-4 rounded-lg overflow-hidden border border-gray-300">
+            <iframe
+              src={course.contentUrl}
+              title={course.title}
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className="w-full h-full"
+            ></iframe>
+          </div>
+        )}
+        {course.type === 'pdf' && ( // Changed from contentType to type to match mockCourses
+          <div className="w-full h-96 mb-4 rounded-lg overflow-hidden border border-gray-300">
+            <iframe
+              src={course.contentUrl}
+              title={course.title}
+              className="w-full h-full"
+            ></iframe>
+          </div>
+        )}
+        {course.type === 'external_link' && ( // Changed from contentType to type to match mockCourses
+          <a
+            href={course.contentUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 mt-2"
+          >
+            Go to Course
+          </a>
+        )}
+        {/* Add more content types as needed */}
+
+        <div className="flex justify-between items-center mt-6">
+          <button
+            onClick={() => setSelectedCourse(null)}
+            className="px-5 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition-colors duration-200"
+          >
+            Back to Courses
+          </button>
+          {!isCompleted && (
+            <button
+              onClick={() => handleMarkComplete(course.id)}
+              className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200"
+            >
+              Mark as Completed
+            </button>
+          )}
+          {isCompleted && (
+            <span className="text-green-600 font-semibold text-lg">Completed! 🎉</span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="p-6 bg-gray-50 min-h-screen">
+      <h2 className="text-3xl font-bold text-gray-900 mb-8">My Courses & Quizzes</h2>
+
+      {selectedCourse ? (
+        renderContent(selectedCourse)
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {assignedCourses.length === 0 ? (
+            <p className="text-gray-600 col-span-full">No courses assigned yet. Check back later!</p>
+          ) : (
+            assignedCourses.map(course => {
+              const progress = userProgress[course.id] || { status: 'not_started', completionPercentage: 0 };
+              const isCompleted = progress.status === 'completed';
+              const isOverdue = progress.status === 'overdue';
+
+              let borderColor = 'border-gray-200';
+              let statusText = 'Not Started';
+              let statusColor = 'text-gray-500';
+
+              if (progress.status === 'in_progress') {
+                borderColor = 'border-blue-400';
+                statusText = 'In Progress';
+                statusColor = 'text-blue-600';
+              } else if (isCompleted) {
+                borderColor = 'border-green-500';
+                statusText = 'Completed';
+                statusColor = 'text-green-600';
+              } else if (isOverdue) {
+                borderColor = 'border-red-500';
+                statusText = 'Overdue';
+                statusColor = 'text-red-600';
+              }
+
+              return (
+                <div
+                  key={course.id}
+                  className={`bg-white rounded-xl shadow-lg p-6 border-l-4 ${borderColor} cursor-pointer hover:shadow-xl transition-all duration-300`}
+                  onClick={() => handleCourseClick(course)}
+                >
+                  <h3 className="text-xl font-semibold text-gray-800 mb-2">{course.title}</h3>
+                  <p className="text-gray-600 text-sm mb-3 line-clamp-2">{course.description}</p>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className={`font-medium ${statusColor}`}>{statusText}</span>
+                    <span className="text-gray-500">{progress.completionPercentage || 0}% Complete</span>
+                  </div>
+                  {progress.dueDate && (
+                    <p className="text-xs text-gray-400 mt-2">Due: {new Date(progress.dueDate).toLocaleDateString()}</p>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+       <Modal
+        show={showModal}
+        title={modalTitle}
+        message={modalMessage}
+        onConfirm={closeModal}
+        showCancel={false}
+      />
+    </div>
+  );
+};
+
+
+const ProgressTracker = () => {
+  const { userId, db, appId, isAuthReady, userRole } = useAppContext();
+  const [allUserProgress, setAllUserProgress] = useState([]);
+  const [usersData, setUsersData] = useState({});
+
+  useEffect(() => {
+    if (!isAuthReady || !db || !userRole || ['trainee', 'support'].includes(userRole)) return; // Only for admins
+
+    const fetchAllProgress = async () => {
+      // Fetch all users
+      const usersColRef = collection(db, 'artifacts', appId, 'users');
+      const usersSnapshot = await getDocs(usersColRef);
+      const fetchedUsers = {};
+      usersSnapshot.forEach(doc => {
+        fetchedUsers[doc.id] = doc.data();
+      });
+      setUsersData(fetchedUsers);
+
+      // Listen to progress for each user
+      // Create an array to hold all unsubscribe functions
+      const unsubscribes = [];
+
+      for (const uid in fetchedUsers) {
+        const progressRef = collection(db, 'artifacts', appId, 'users', uid, 'progress');
+        const unsubscribe = onSnapshot(progressRef, (snapshot) => {
+          const userProgressDocs = snapshot.docs.map(doc => ({ ...doc.data(), uid: uid, courseId: doc.id }));
+          // Update the state in an immutable way
+          setAllUserProgress(prevProgress => {
+            // Remove existing progress for this user
+            const filteredProgress = prevProgress.filter(item => item.uid !== uid);
+            // Add updated progress for this user
+            return [...filteredProgress, ...userProgressDocs];
+          });
+        }, (error) => console.error(`Error fetching progress for ${uid}:`, error));
+        unsubscribes.push(unsubscribe); // Store unsubscribe function
+      }
+
+      // Cleanup function for all listeners
+      return () => {
+        unsubscribes.forEach(unsub => unsub());
+      };
+    };
+
+    fetchAllProgress();
+
+  }, [db, appId, isAuthReady, userRole]);
+
+  if (!['domain_coordinator', 'team_lead', 'co_lead', 'project_manager'].includes(userRole)) {
+    return <div className="p-6 text-center text-gray-600">Access Denied. You do not have permission to view this page.</div>;
+  }
+
+  // Group progress by user
+  const progressByUser = allUserProgress.reduce((acc, item) => {
+    if (!acc[item.uid]) {
+      acc[item.uid] = [];
+    }
+    acc[item.uid].push(item);
+    return acc;
+  }, {});
+
+  return (
+    <div className="p-6 bg-gray-50 min-h-screen">
+      <h2 className="text-3xl font-bold text-gray-900 mb-8">Progress Tracker</h2>
+
+      {Object.keys(progressByUser).length === 0 ? (
+        <p className="text-gray-600">No trainee progress data available yet.</p>
+      ) : (
+        <div className="space-y-8">
+          {Object.entries(progressByUser).map(([uid, progressItems]) => {
+            const userProfile = usersData[uid] || { email: 'Unknown User', role: 'unknown', team: 'Unknown Team' };
+            return (
+              <div key={uid} className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
+                <h3 className="text-xl font-semibold text-blue-700 mb-3">{userProfile.email} <span className="text-sm text-gray-500">({userProfile.name} - {userProfile.team})</span></h3>
+                <p className="text-sm text-gray-500 mb-4">User ID: <span className="font-mono text-xs bg-gray-100 p-1 rounded">{uid}</span></p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {progressItems.map(item => {
+                    const course = mockCourses.find(c => c.id === item.courseId); // Find course details
+                    const courseTitle = course ? course.title : 'Unknown Course';
+                    const progressColor = item.completionPercentage === 100 ? 'bg-green-500' : 'bg-blue-500';
+
+                    return (
+                      <div key={item.courseId} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                        <p className="font-medium text-gray-800">{courseTitle}</p>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5 my-2">
+                          <div className={`${progressColor} h-2.5 rounded-full`} style={{ width: `${item.completionPercentage}%` }}></div>
+                        </div>
+                        <p className="text-sm text-gray-600">Status: <span className="font-semibold">{item.status.replace('_', ' ')}</span></p>
+                        <p className="text-sm text-gray-600">Completion: {item.completionPercentage}%</p>
+                        {Object.keys(item.quizScores).length > 0 && (
+                          <p className="text-sm text-gray-600">Quiz Scores: {JSON.stringify(item.quizScores)}</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+
+const TrainingBuilder = () => {
+  const { userRole, db, appId } = useAppContext();
+  const [courseTitle, setCourseTitle] = useState('');
+  const [courseDesc, setCourseDesc] = useState('');
+  const [courseType, setCourseType] = useState('video');
+  const [contentUrl, setContentUrl] = useState('');
+  const [domain, setDomain] = useState('Compliance GRC');
+  const [showModal, setShowModal] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
+
+  if (!['domain_coordinator', 'project_manager'].includes(userRole)) {
+    return <div className="p-6 text-center text-gray-600">Access Denied. You do not have permission to view this page.</div>;
+  }
+
+  const handleSubmitCourse = async (e) => {
+    e.preventDefault();
+    try {
+      const newCourse = {
+        title: courseTitle,
+        description: courseDesc,
+        type: courseType, // Changed from contentType to type to match mockCourses structure
+        contentUrl: contentUrl,
+        domain: domain,
+        createdAt: new Date().toISOString()
+      };
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'courses'), newCourse);
+      setModalTitle("Success");
+      setModalMessage("Course added successfully!");
+      setShowModal(true);
+      setCourseTitle('');
+      setCourseDesc('');
+      setContentUrl('');
+    } catch (error) {
+      setModalTitle("Error");
+      setModalMessage(`Failed to add course: ${error.message}`);
+      setShowModal(true);
+      console.error("Error adding course:", error);
+    }
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+  };
+
+  return (
+    <div className="p-6 bg-gray-50 min-h-screen">
+      <h2 className="text-3xl font-bold text-gray-900 mb-8">Training Path Builder</h2>
+      <div className="bg-white rounded-xl shadow-lg p-6 max-w-2xl mx-auto">
+        <h3 className="text-xl font-semibold text-gray-800 mb-4">Create New Course/Module</h3>
+        <form onSubmit={handleSubmitCourse} className="space-y-4">
+          <div>
+            <label htmlFor="courseTitle" className="block text-sm font-medium text-gray-700">Course Title</label>
+            <input
+              type="text"
+              id="courseTitle"
+              value={courseTitle}
+              onChange={(e) => setCourseTitle(e.target.value)}
+              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="courseDesc" className="block text-sm font-medium text-gray-700">Description</label>
+            <textarea
+              id="courseDesc"
+              value={courseDesc}
+              onChange={(e) => setCourseDesc(e.target.value)}
+              rows="3"
+              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              required
+            ></textarea>
+          </div>
+          <div>
+            <label htmlFor="courseType" className="block text-sm font-medium text-gray-700">Content Type</label>
+            <select
+              id="courseType"
+              value={courseType}
+              onChange={(e) => setCourseType(e.target.value)}
+              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="video">Video</option>
+              <option value="pdf">PDF</option>
+              <option value="slides">Slide Deck</option>
+              <option value="case_study">Case Study</option>
+              <option value="external_link">External Link</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="contentUrl" className="block text-sm font-medium text-gray-700">Content URL</label>
+            <input
+              type="url"
+              id="contentUrl"
+              value={contentUrl}
+              onChange={(e) => setContentUrl(e.target.value)}
+              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              placeholder="e.g., https://youtube.com/your-video, https://example.com/doc.pdf"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="domain" className="block text-sm font-medium text-gray-700">Domain</label>
+            <select
+              id="domain"
+              value={domain}
+              onChange={(e) => setDomain(e.target.value)}
+              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="Compliance GRC">Compliance GRC</option>
+              <option value="Security GRC">Security GRC</option>
+              <option value="Risk GRC">Risk GRC</option>
+              <option value="Governance GRC">Governance Gptc</option>
+            </select>
+          </div>
+          <button
+            type="submit"
+            className="w-full px-5 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition duration-150 ease-in-out"
+          >
+            Add Course
+          </button>
+        </form>
+      </div>
+      <Modal
+        show={showModal}
+        title={modalTitle}
+        message={modalMessage}
+        onConfirm={closeModal}
+        showCancel={false}
+      />
+    </div>
+  );
+};
+
+
+const UserManagement = () => {
+  const { userRole, db, appId } = useAppContext();
+  const [users, setUsers] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
+
+  useEffect(() => {
+    if (!db || userRole !== 'project_manager') return;
+
+    // Listen for real-time updates on users
+    const usersColRef = collection(db, 'artifacts', appId, 'users');
+    const unsubscribe = onSnapshot(usersColRef, (snapshot) => {
+      const usersListPromises = snapshot.docs.map(async userDoc => {
+        const profileDocRef = doc(usersColRef, userDoc.id, 'profile', 'data');
+        const profileSnap = await getDoc(profileDocRef); // Use getDoc instead of onSnapshot here for fetching current profiles
+        if (profileSnap.exists()) {
+          return { id: userDoc.id, ...profileSnap.data() };
+        } else {
+          return { id: userDoc.id, email: userDoc.id, role: 'unknown' }; // Fallback if profile not found
+        }
+      });
+
+      Promise.all(usersListPromises).then(setUsers);
+
+      if (snapshot.empty) {
+        setUsers([]);
+      }
+    }, (error) => console.error("Error fetching users:", error));
+
+    return () => unsubscribe();
+  }, [db, appId, userRole]);
+
+
+  const handleChangeRole = async (userId, newRole) => {
+    try {
+      const userProfileRef = doc(db, 'artifacts', appId, 'users', userId, 'profile', 'data');
+      await updateDoc(userProfileRef, { role: newRole });
+      setModalTitle("Role Updated");
+      setModalMessage(`User role for ${userId} updated to ${newRole}.`);
+      setShowModal(true);
+    } catch (error) {
+      setModalTitle("Error");
+      setModalMessage(`Failed to update role: ${error.message}`);
+      setShowModal(true);
+      console.error("Error updating user role:", error);
+    }
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+  };
+
+  if (userRole !== 'project_manager') {
+    return <div className="p-6 text-center text-gray-600">Access Denied. You do not have permission to view this page.</div>;
+  }
+
+  return (
+    <div className="p-6 bg-gray-50 min-h-screen">
+      <h2 className="text-3xl font-bold text-gray-900 mb-8">User Management</h2>
+      <div className="bg-white rounded-xl shadow-lg p-6">
+        <h3 className="text-xl font-semibold text-gray-800 mb-4">Manage User Roles</h3>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tl-lg">
+                  User ID
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Email
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Current Role
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tr-lg">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {users.length === 0 ? (
+                <tr>
+                  <td colSpan="4" className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+                    No users found.
+                  </td>
+                </tr>
+              ) : (
+                users.map((user) => (
+                  <tr key={user.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">
+                      {user.id}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {user.email || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 capitalize">
+                      {user.role?.replace('_', ' ') || 'unknown'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <select
+                        value={user.role || 'trainee'}
+                        onChange={(e) => handleChangeRole(user.id, e.target.value)}
+                        className="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      >
+                        <option value="trainee">Trainee</option>
+                        <option value="support">Support Team</option>
+                        <option value="domain_coordinator">Domain Coordinator</option>
+                        <option value="team_lead">Team Lead</option>
+                        <option value="co_lead">Co-Lead</option>
+                        <option value="project_manager">Project Manager</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <Modal
+        show={showModal}
+        title={modalTitle}
+        message={modalMessage}
+        onConfirm={closeModal}
+        showCancel={false}
+      />
+    </div>
+  );
+};
+
+
+const Notifications = () => {
+  const { userId, db, appId, isAuthReady } = useAppContext();
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!isAuthReady || !userId || !db) return;
+
+    const notificationsRef = collection(db, 'artifacts', appId, 'users', userId, 'notifications');
+    const unsubscribe = onSnapshot(notificationsRef, (snapshot) => {
+      const fetchedNotifications = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Sort by timestamp descending
+      fetchedNotifications.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      setNotifications(fetchedNotifications);
+      setLoading(false);
+    }, (err) => {
+      setError("Failed to load notifications: " + err.message);
+      setLoading(false);
+      console.error("Error fetching notifications:", err);
+    });
+
+    return () => unsubscribe(); // Cleanup listener
+  }, [userId, db, appId, isAuthReady]);
+
+  if (loading) return <div className="p-6 text-center text-gray-600">Loading notifications...</div>;
+  if (error) return <div className="p-6 text-center text-red-600">{error}</div>;
+
+  return (
+    <div className="p-6 bg-gray-50 min-h-screen">
+      <h2 className="text-3xl font-bold text-gray-900 mb-8">Notification Center</h2>
+      <div className="bg-white rounded-xl shadow-lg p-6 max-w-2xl mx-auto">
+        {notifications.length === 0 ? (
+          <p className="text-gray-600 text-center">No new notifications.</p>
+        ) : (
+          <div className="space-y-4">
+            {notifications.map(notification => (
+              <div
+                key={notification.id}
+                className={`p-4 rounded-lg border ${notification.read ? 'bg-gray-50 border-gray-200' : 'bg-blue-50 border-blue-200 font-medium'}`}
+              >
+                <p className="text-gray-800">{notification.message}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {new Date(notification.timestamp).toLocaleString()}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
+const AskATrainer = () => {
+  const { user, userId, isAuthReady } = useAppContext();
+  const [question, setQuestion] = useState('');
+  const [response, setResponse] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [chatHistory, setChatHistory] = useState([]); // Store questions and responses
+  const [showModal, setShowModal] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
+
+  const apiKey = ""; // Canvas will automatically provide the API key at runtime
+
+  const handleAsk = async () => {
+    if (!question.trim() || !isAuthReady || !userId) {
+      setModalTitle("Input Required");
+      setModalMessage("Please enter a question.");
+      setShowModal(true);
+      return;
+    }
+
+    setLoading(true);
+    const userQuestion = question.trim();
+    setChatHistory(prev => [...prev, { role: 'user', text: userQuestion }]);
+    setQuestion('');
+    setResponse('');
+
+    try {
+      const payload = {
+        contents: [{ role: "user", parts: [{ text: userQuestion }] }],
+      };
+
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+      const fetchResponse = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await fetchResponse.json();
+
+      if (result.candidates && result.candidates.length > 0 &&
+          result.candidates[0].content && result.candidates[0].content.parts &&
+          result.candidates[0].content.parts.length > 0) {
+        const text = result.candidates[0].content.parts[0].text;
+        setResponse(text);
+        setChatHistory(prev => [...prev, { role: 'model', text: text }]);
+      } else {
+        setResponse("Sorry, I couldn't get a response. Please try again.");
+        setChatHistory(prev => [...prev, { role: 'model', text: "Sorry, I couldn't get a response. Please try again." }]);
+        setModalTitle("API Error");
+        setModalMessage("Unexpected response from the AI assistant. Please try again.");
+        setShowModal(true);
+      }
+    } catch (err) {
+      setResponse("An error occurred while fetching the response.");
+      setChatHistory(prev => [...prev, { role: 'model', text: "An error occurred while fetching the response." }]);
+      setModalTitle("Network Error");
+      setModalMessage(`An error occurred: ${err.message}`);
+      setShowModal(true);
+      console.error("Fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+  };
+
+  return (
+    <div className="p-6 bg-gray-50 min-h-screen flex flex-col">
+      <h2 className="text-3xl font-bold text-gray-900 mb-8">Ask a Trainer (AI Assistant)</h2>
+
+      <div className="flex-1 bg-white rounded-xl shadow-lg p-6 flex flex-col max-w-2xl mx-auto w-full">
+        <div className="flex-1 overflow-y-auto pr-4 mb-4 border-b border-gray-200 pb-4">
+          {chatHistory.length === 0 ? (
+            <p className="text-gray-500 text-center">Ask me anything about GRC training!</p>
+          ) : (
+            chatHistory.map((msg, index) => (
+              <div key={index} className={`mb-3 ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
+                <span className={`inline-block p-3 rounded-lg max-w-[80%] ${
+                  msg.role === 'user' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                }`}>
+                  {msg.text}
+                </span>
+              </div>
+            ))
+          )}
+          {loading && (
+            <div className="text-left">
+              <span className="inline-block p-3 rounded-lg bg-gray-100 text-gray-600">Thinking...</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center">
+          <input
+            type="text"
+            placeholder="Type your question here..."
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 mr-3"
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleAsk()}
+            disabled={loading}
+          />
+          <button
+            onClick={handleAsk}
+            className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 flex-shrink-0"
+            disabled={loading}
+          >
+            {loading ? 'Asking...' : 'Ask'}
+          </button>
+        </div>
+      </div>
+      <Modal
+        show={showModal}
+        title={modalTitle}
+        message={modalMessage}
+        onConfirm={closeModal}
+        showCancel={false}
+      />
+    </div>
+  );
+};
+
+
+// ----------------------------------------------------
+// Main App Component
+// ----------------------------------------------------
+const App = () => {
+  const { user, userId, userRole, isAuthReady, auth } = useAppContext();
+  const [currentPage, setCurrentPage] = useState('my-courses'); // Default page for authenticated users
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      // user state will be updated by onAuthStateChanged listener in AppProvider
+      setCurrentPage('my-courses'); // Reset page after sign out
+    } catch (error) {
+      console.error("Error signing out:", error);
+      // Potentially show a modal alert for sign-out error
+    }
+  };
+
+  if (!isAuthReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 to-indigo-200">
+        <div className="text-blue-700 text-xl font-semibold">Loading TrainGRC...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <SignInPage />;
+  }
+
+  // Define content based on current page and user role
+  const renderPageContent = () => {
+    switch (currentPage) {
+      case 'my-courses':
+        return <MyCourses />;
+      case 'progress-tracker':
+        return <ProgressTracker />;
+      case 'training-builder':
+        return <TrainingBuilder />;
+      case 'user-management':
+        return <UserManagement />;
+      case 'notifications':
+        return <Notifications />;
+      case 'ask-trainer':
+        return <AskATrainer />;
+      default:
+        return <MyCourses />; // Fallback
+    }
+  };
+
+  return (
+    <div className="font-inter antialiased bg-gray-100">
+      <Navbar setCurrentPage={setCurrentPage} userRole={userRole} handleSignOut={handleSignOut} />
+      <main className="container mx-auto mt-6">
+        {renderPageContent()}
+      </main>
+    </div>
+  );
+};
+
+// Wrap the main App component with AppProvider so that useAppContext can be used by App and its children
+const WrappedApp = () => (
+  <AppProvider>
+    <App />
+  </AppProvider>
+);
+
+export default WrappedApp;
